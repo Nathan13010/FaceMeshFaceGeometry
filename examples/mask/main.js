@@ -7,7 +7,7 @@ import {
   PerspectiveCamera,
   HemisphereLight,
   AmbientLight,
-  IcosahedronGeometry,
+  BoxBufferGeometry,
   OrthographicCamera,
   DoubleSide,
   Mesh,
@@ -15,6 +15,7 @@ import {
   TextureLoader,
   MeshStandardMaterial,
 } from "../../third_party/three.module.js";
+import { GLTFLoader } from "https://unpkg.com/three@0.116.1/examples/jsm/loaders/GLTFLoader.js";
 import { FaceMeshFaceGeometry } from "../../js/face.js";
 import { OrbitControls } from "../../third_party/OrbitControls.js";
 
@@ -99,6 +100,15 @@ const mask = new Mesh(faceGeometry, material);
 scene.add(mask);
 mask.receiveShadow = mask.castShadow = true;
 
+// UI: toggle visibilité du mesh de visage
+const toggleBtn = document.getElementById("toggle-mask");
+if (toggleBtn) {
+  toggleBtn.addEventListener("click", () => {
+    mask.visible = !mask.visible;
+    toggleBtn.textContent = mask.visible ? "Masquer le visage" : "Afficher le visage";
+  });
+}
+
 // Add lights.
 const spotLight = new SpotLight(0xffffbb, 1);
 spotLight.position.set(0.5, 0.5, 1);
@@ -125,7 +135,7 @@ scene.add(hemiLight);
 const ambientLight = new AmbientLight(0x404040, 0.25);
 scene.add(ambientLight);
 
-// Create a red material for the nose.
+// Create a red material for the default cube (nose replacement / fallback).
 const noseMaterial = new MeshStandardMaterial({
   color: 0xff2010,
   roughness: 0.4,
@@ -133,10 +143,31 @@ const noseMaterial = new MeshStandardMaterial({
   transparent: true,
 });
 
-const nose = new Mesh(new IcosahedronGeometry(1, 3), noseMaterial);
+const nose = new Mesh(new BoxBufferGeometry(1, 1, 1), noseMaterial);
 nose.castShadow = nose.receiveShadow = true;
 scene.add(nose);
-nose.scale.setScalar(40);
+nose.scale.setScalar(30);
+
+// Accessoire courant à suivre (cube par défaut, remplacé par glasses.glb si dispo)
+let accessory = nose;
+
+// Charger les lunettes GLB depuis la racine du projet
+const gltfLoader = new GLTFLoader();
+gltfLoader.load(
+  "/glasses.glb",
+  (gltf) => {
+    const glasses = gltf.scene;
+    glasses.traverse((obj) => {
+      if (obj.isMesh) obj.castShadow = obj.receiveShadow = true;
+    });
+    glasses.scale.setScalar(35);
+    scene.remove(accessory);
+    accessory = glasses;
+    scene.add(accessory);
+  },
+  undefined,
+  (err) => console.error("Failed to load glasses.glb", err)
+);
 
 // Enable wireframe to debug the mesh on top of the material.
 let wireframe = false;
@@ -177,10 +208,10 @@ async function render(model) {
     // Update face mesh geometry with new data.
     faceGeometry.update(faces[0], flipCamera);
 
-    // Modify nose position and orientation.
+    // Positionner l'accessoire (cube par défaut ou glasses.glb si chargé)
     const track = faceGeometry.track(5, 45, 275);
-    nose.position.copy(track.position);
-    nose.rotation.setFromRotationMatrix(track.rotation);
+    accessory.position.copy(track.position);
+    accessory.rotation.setFromRotationMatrix(track.rotation);
   }
 
   if (wireframe) {
